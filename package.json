@@ -29,6 +29,12 @@
       "hash": "QmdxUuburamoF6zF9qjeQC4WYcWGbWuRmdLacMEsW8ioD8",
       "name": "gogo-protobuf",
       "version": "0.0.0"
+    },
+    {
+      "author": "frrist",
+      "hash": "QmW9EWRxAW7gH5P8YoQCZZks6oi5jzx9k97N78cHzuvFYA",
+      "name": "logrus",
+      "version": "0.0.0"
     }
   ],
   "gxVersion": "0.12.1",

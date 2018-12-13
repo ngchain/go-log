@@ -7,17 +7,98 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
+	"os"
 	"path"
 	"runtime"
+	"strings"
 	"time"
 
+	logrus "github.com/frrist/logrus"
+	tracer "github.com/ipfs/go-log/tracer"
 	writer "github.com/ipfs/go-log/writer"
 
 	opentrace "github.com/opentracing/opentracing-go"
 	otExt "github.com/opentracing/opentracing-go/ext"
 )
 
-var log = Logger("eventlog")
+var log = logrus.New().WithField("system", "eventlog")
+
+// Logging environment variables
+const (
+	// TODO these env names should be more general, IPFS is not the only project to
+	// use go-log
+	envLogging     = "IPFS_LOGGING"
+	envLoggingFmt  = "IPFS_LOGGING_FMT"
+	envLoggingFile = "GOLOG_FILE"         // /path/to/file
+	envTracingFile = "GOLOG_TRACING_FILE" // /path/to/file
+)
+
+func init() {
+	envLogFormat()
+	envLogLevel()
+	envLogFile()
+	envTraceFile()
+}
+
+func envLogFormat() {
+	// default color text format
+	logrus.SetFormatter(&logrus.TextFormatter{})
+	lfmt := os.Getenv(envLoggingFmt)
+	if lfmt == "nocolor" {
+		lgfmt := &logrus.TextFormatter{}
+		lgfmt.DisableColors = true
+		logrus.SetFormatter(lgfmt)
+	}
+	if lfmt == "json" {
+		logrus.SetFormatter(&logrus.JSONFormatter{})
+	}
+}
+
+func envLogLevel() {
+	// default error level
+	logrus.SetLevel(logrus.ErrorLevel)
+	if logenv := os.Getenv(envLogging); logenv != "" {
+		switch strings.ToLower(logenv) {
+		case "trace":
+			logrus.SetLevel(logrus.TraceLevel)
+		case "debug":
+			logrus.SetLevel(logrus.DebugLevel)
+		case "info":
+			logrus.SetLevel(logrus.InfoLevel)
+		case "warn":
+			logrus.SetLevel(logrus.WarnLevel)
+		case "error":
+			logrus.SetLevel(logrus.ErrorLevel)
+		case "fatal":
+			logrus.SetLevel(logrus.FatalLevel)
+		}
+	}
+}
+
+func envLogFile() {
+	// default to stderr
+	logrus.SetOutput(os.Stderr)
+	if logfp := os.Getenv(envLoggingFile); len(logfp) > 0 {
+		f, err := os.Create(logfp)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error go-log: %s: failed to set logging file backend\n", err)
+		} else {
+			logrus.SetOutput(f)
+		}
+	}
+}
+
+func envTraceFile() {
+	if tracingfp := os.Getenv(envTracingFile); len(tracingfp) > 0 {
+		f, err := os.Create(tracingfp)
+		if err != nil {
+			log.Errorf("failed to create tracing file: %s", tracingfp)
+		} else {
+			writer.WriterGroup.AddWriter(f)
+		}
+	}
+}
 
 // StandardLogger provides API compatibility with standard printf loggers
 // eg. go-logging
@@ -149,12 +230,18 @@ func Logger(system string) EventLogger {
 	// TODO if we would like to adjust log levels at run-time. Store this event
 	// logger in a map (just like the util.Logger impl)
 	if len(system) == 0 {
-		setuplog := getLogger("setup-logger")
+		setuplog := logrus.New().WithField("system", "setup-logger")
 		setuplog.Warning("Missing name parameter")
 		system = "undefined"
 	}
 
-	logger := getLogger(system)
+	logger := logrus.New().WithField("system", system)
+
+	// TracerPlugins are instantiated after this, so use loggable tracer
+	// by default, if a TracerPlugin is added it will override this
+	lgblRecorder := tracer.NewLoggableRecorder()
+	lgblTracer := tracer.New(lgblRecorder)
+	opentrace.SetGlobalTracer(lgblTracer)
 
 	return &eventLogger{system: system, StandardLogger: logger}
 }
@@ -267,7 +354,7 @@ func deserializeContext(bCtx []byte) (opentrace.SpanContext, error) {
 	carrier := bytes.NewReader(bCtx)
 	spanContext, err := gTracer.Extract(opentrace.Binary, carrier)
 	if err != nil {
-		log.Warning("Failed to deserialize context %s", err)
+		log.Warningf("Failed to deserialize context %s", err)
 		return nil, err
 	}
 	return spanContext, nil
