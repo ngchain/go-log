@@ -258,6 +258,11 @@ func configFromEnv() Config {
 	if lvl == "" {
 		lvl = os.Getenv(envIPFSLogging)
 	}
+	
+	if lvl == "" {
+		lvl = "warn" // dafault level from env
+	}
+	
 	if lvl != "" {
 		var err error
 		cfg.Level, err = LevelFromString(lvl)
