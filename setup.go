@@ -76,7 +76,7 @@ var levels = make(map[string]zap.AtomicLevel)
 var primaryFormat LogFormat = ColorizedOutput
 
 // defaultLevel is the default log level
-var defaultLevel LogLevel = LevelError
+var defaultLevel LogLevel = LevelWarn
 
 // primaryCore is the primary logging core
 var primaryCore zapcore.Core
